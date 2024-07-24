@@ -1,0 +1,9 @@
+[Application]
+port = 8888
+
+[StravaClient]
+clientid = xxxx
+clientsecret = xxxxx
+
+[UserAcct]
+token =
