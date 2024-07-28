@@ -9,7 +9,7 @@ from login import login
 # Strava REST API wrapper
 from stravalib.client import Client as StravaClient
 
-color_intensity = ['#0000ff', '#1c00e5', '#3800cc', '#5500b2', '#710099', '#8d007f', '#a90066', '#c5004c', '#e20033', '#ff0019']
+color_intensity = ['#110746', '#410956', '#6e055f', '#990861', '#bf215d', '#df4152', '#f76544', '#ff8d30', '#ffb716', '#ffe100']
 
 
 # Experimental : Higher radius but only one circle gets overlapped per polyline
@@ -33,7 +33,7 @@ def generate_map_weighted(activities_map, experimental=False):
     
     for coord, i in coords:
         # Query the KDTree for nearby points within the specified distance
-        distance = experimental and 0.0005 or 0.00015
+        distance = experimental and 0.00025 or 0.00015
         indices = tree.query_ball_point(coord, distance, return_sorted=True)
 
         value = 1
@@ -44,7 +44,7 @@ def generate_map_weighted(activities_map, experimental=False):
         for idx in indices:
             nearby_coord, poly_index = coords[idx]
             if poly_index != i and poly_index not in treated_polys:
-                value += coord_dict.get(nearby_coord, (0, poly_index))[0]
+                value += coord_dict.get(nearby_coord, (1, poly_index))[0]
                 treated_polys.append(poly_index)
                 keys_to_delete.append(nearby_coord)
             elif not experimental:
@@ -57,10 +57,8 @@ def generate_map_weighted(activities_map, experimental=False):
 
         coord_dict[coord] = (value, i)
 
-    highest = max(coord_dict.values(), key=lambda x: x[0])[0]
     for coord, (value, _) in coord_dict.items():
-        # The higher the value, the darker the color
-        color = color_intensity[min(int(value / highest * len(color_intensity)), len(color_intensity) - 1)]
+        color = color_intensity[min(value, len(color_intensity) - 1)]
         folium.CircleMarker(coord, radius=5, color=color, fill_color=color).add_to(activities_map)
 
 
