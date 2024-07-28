@@ -1,9 +1,7 @@
-import configparser
 import os
 import folium
 import polyline
 from scipy.spatial import KDTree
-import time
 import numpy as np
 
 from login import login

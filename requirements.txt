@@ -1,1 +1,4 @@
 stravalib
+scipy
+polyline
+folium
