@@ -20,13 +20,7 @@ Copy the strava.cfg.sample to strava.cfg and fill the informations in there.
 
 ## Usage
 
-Run the "login.py" script to authenticate with the Strava API and save the access token to a file:
-
-```bash
-python login.py
-```
-
-Run the "main.py" script to read the access token from the file and use it to make a request to the Strava API to get data on the user's activities:
+Run the "main.py" script to get started
 
 ```bash
 python main.py
