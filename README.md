@@ -31,3 +31,11 @@ Run the "main.py" script to read the access token from the file and use it to ma
 ```bash
 python main.py
 ```
+
+
+## TODO :
+- [x] Global map with all activities
+- [x] Weighted per coordinate
+- [ ] Heatmap (number of activities per areas ?)
+- [ ] Get most popular segments
+- [ ] Get all trainings until a "race" type, with no pause longer than 1 week
