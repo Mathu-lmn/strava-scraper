@@ -67,7 +67,7 @@ def login():
         expires_at = cfg.get("UserAcct", "ExpiresAt")
         refresh_token = cfg.get("UserAcct", "RefreshToken")
     except configparser.NoOptionError:
-        expires_at = None
+        expires_at = 0
         refresh_token = None
 
     if int(expires_at) < int(time.time()):
