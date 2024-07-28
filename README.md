@@ -16,7 +16,7 @@ pip install -r requirements.txt
 
 Create an API application here : https://www.strava.com/settings/api
 
-Copy the strava.cfg.sample to strava.cfg and fill the informations in there.
+Copy the strava.cfg.sample to strava.cfg and fill the informations in there - DO NOT FILL THE TOKEN VALUE
 
 ## Usage
 

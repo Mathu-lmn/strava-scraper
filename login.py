@@ -49,6 +49,8 @@ def login():
         httpd.handle_request()
         code = httpd.code
 
+        httpd.server_close()
+
         client_id = int(client_id)
         # Get the token
         tokenData = client.exchange_code_for_token(client_id=client_id, client_secret=client_secret, code=code)
@@ -62,13 +64,16 @@ def login():
         cfg.set("UserAcct", "ExpiresAt", str(expires_at))
         with open("strava.cfg", "w") as cfg_file:
             cfg.write(cfg_file)
+    else:
+        try:
+            expires_at = cfg.get("UserAcct", "ExpiresAt")
+            refresh_token = cfg.get("UserAcct", "RefreshToken")
+        except configparser.NoOptionError:
+            expires_at = None
+            refresh_token = None
 
-    try:
-        expires_at = cfg.get("UserAcct", "ExpiresAt")
-        refresh_token = cfg.get("UserAcct", "RefreshToken")
-    except configparser.NoOptionError:
-        expires_at = 0
-        refresh_token = None
+        if not expires_at or not refresh_token:
+            raise Exception("No refresh token or expires_at in config file, but access token is present. Please erase the token value")
 
     if int(expires_at) < int(time.time()):
         tokenData = client.refresh_access_token(client_id=client_id, client_secret=client_secret, refresh_token=refresh_token)
@@ -84,11 +89,7 @@ def login():
 
     client.access_token = token
 
-    # do stuff
     athlete = client.get_athlete()
     print("Successfully authenticated for {0} {1}".format(athlete.firstname, athlete.lastname))
-
-    if 'httpd' in locals():
-        httpd.server_close()
 
     return client

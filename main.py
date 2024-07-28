@@ -111,7 +111,11 @@ def create_map_cache():
 
 
 if __name__ == "__main__":
-    client = login()
+    try :
+        client = login()
+    except Exception as e:
+        print("Error: {0}".format(e))
+        exit(1)
 
     global_map()
 
