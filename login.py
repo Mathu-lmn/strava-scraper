@@ -1,6 +1,7 @@
 import configparser
 import http.server
 import webbrowser
+import time
 
 # Strava REST API wrapper
 from stravalib.client import Client as StravaClient
@@ -15,9 +16,7 @@ class AuthHandler(http.server.BaseHTTPRequestHandler):
     def get_code(self):
         self.server.code = [ x[5:]for x in self.path.split("?")[-1].split('&')  if x.startswith('code=') ][0]
         
-# Only run this if we call this script directly
-if __name__ == "__main__":
-
+def login():
     # Let's load the config from a file
     cfg = configparser.ConfigParser(default_section="Application")
     cfg.read("strava.cfg")
@@ -52,10 +51,34 @@ if __name__ == "__main__":
 
         client_id = int(client_id)
         # Get the token
-        token = client.exchange_code_for_token(client_id=client_id, client_secret=client_secret, code=code)['access_token']
-
+        tokenData = client.exchange_code_for_token(client_id=client_id, client_secret=client_secret, code=code)
+        
+        token = tokenData['access_token']
+        refresh_token = tokenData['refresh_token']
+        expires_at = tokenData['expires_at']
         # Now store that access token in the config
         cfg.set("UserAcct", "Token", str(token))
+        cfg.set("UserAcct", "RefreshToken", str(refresh_token))
+        cfg.set("UserAcct", "ExpiresAt", str(expires_at))
+        with open("strava.cfg", "w") as cfg_file:
+            cfg.write(cfg_file)
+
+    try:
+        expires_at = cfg.get("UserAcct", "ExpiresAt")
+        refresh_token = cfg.get("UserAcct", "RefreshToken")
+    except configparser.NoOptionError:
+        expires_at = None
+        refresh_token = None
+
+    if int(expires_at) < int(time.time()):
+        tokenData = client.refresh_access_token(client_id=client_id, client_secret=client_secret, refresh_token=refresh_token)
+        token = tokenData['access_token']
+        refresh_token = tokenData['refresh_token']
+        expires_at = tokenData['expires_at']
+        # Now store that access token in the config
+        cfg.set("UserAcct", "Token", str(token))
+        cfg.set("UserAcct", "RefreshToken", str(refresh_token))
+        cfg.set("UserAcct", "ExpiresAt", str(expires_at))
         with open("strava.cfg", "w") as cfg_file:
             cfg.write(cfg_file)
 
@@ -64,3 +87,8 @@ if __name__ == "__main__":
     # do stuff
     athlete = client.get_athlete()
     print("Successfully authenticated for {0} {1}".format(athlete.firstname, athlete.lastname))
+
+    if 'httpd' in locals():
+        httpd.server_close()
+
+    return client
