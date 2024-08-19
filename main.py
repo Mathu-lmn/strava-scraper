@@ -66,7 +66,7 @@ def generate_full_map(activities_map):
         if file.startswith("map-"):
             with open("cache/{0}".format(file), "r") as f:
                 line = polyline.decode(f.read())
-                folium.PolyLine(line).add_to(activities_map)
+                folium.PolyLine(line, color="black", weight=2).add_to(activities_map)
 
 def global_map(weighted=False):
     create_map_cache()
