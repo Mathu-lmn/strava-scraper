@@ -6,9 +6,6 @@ import numpy as np
 
 from login import login
 
-# Strava REST API wrapper
-from stravalib.client import Client as StravaClient
-
 color_intensity = ['#110746', '#410956', '#6e055f', '#990861', '#bf215d', '#df4152', '#f76544', '#ff8d30', '#ffb716', '#ffe100']
 
 
@@ -59,7 +56,8 @@ def generate_map_weighted(activities_map, experimental=False):
 
     for coord, (value, _) in coord_dict.items():
         color = color_intensity[min(value, len(color_intensity) - 1)]
-        folium.CircleMarker(coord, radius=5, color=color, fill_color=color).add_to(activities_map)
+        popup = folium.Popup("Passé {0} fois".format(value))
+        folium.CircleMarker(coord, radius=5, color=color, fill_color=color, popup=popup).add_to(activities_map)
 
 
 def generate_full_map(activities_map):
