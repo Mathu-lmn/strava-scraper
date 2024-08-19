@@ -29,12 +29,13 @@ def login():
 
     # get a strava client
     client = StravaClient()
+
+    client_id = cfg.get("StravaClient", "ClientId")
+    client_secret = cfg.get("StravaClient", "ClientSecret")
     
     # if we haven't authorized yet, let's do it:
     if not token:
         # get token from strava
-        client_id = cfg.get("StravaClient", "ClientId")
-        client_secret = cfg.get("StravaClient", "ClientSecret")
         port = int(cfg.get("Application", "Port"))
         
         # setup webserver for authentication redirect
