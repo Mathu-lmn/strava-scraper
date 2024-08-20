@@ -2,3 +2,6 @@ stravalib
 scipy
 polyline
 folium
+pandas
+numpy
+shapely
