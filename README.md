@@ -30,6 +30,6 @@ python main.py
 ## TODO :
 - [x] Global map with all activities
 - [x] Weighted per coordinate
-- [ ] Heatmap (number of activities per areas ?)
+- [ ] Improve the map with ponderation by vectorizing instead of plotting each point
 - [ ] Get most popular segments
 - [ ] Get all trainings until a "race" type, with no pause longer than 1 week
