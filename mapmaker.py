@@ -5,6 +5,7 @@ import polyline
 from scipy.spatial import KDTree
 from shapely.geometry import LineString, Polygon, Point
 import numpy as np
+import random
 
 color_intensity = ['#110746', '#410956', '#6e055f', '#990861', '#bf215d', '#df4152', '#f76544', '#ff8d30', '#ffb716', '#ffe100']
 
@@ -26,7 +27,6 @@ def get_cached_dataframe():
                     })
     return pd.DataFrame(rows)
 
-
 def generate_map_weighted(dataframe, activities_map, debug=False):
     file_max_id = {}
     vect_dict = dataframe
@@ -38,6 +38,7 @@ def generate_map_weighted(dataframe, activities_map, debug=False):
         points = np.concatenate([vect_dict["vector-in"].tolist(), vect_dict["vector-out"].tolist()])
         return KDTree(points)
 
+    # THIS FUNCTION IS BROKEN, indices returned by query_ball_point are not the same as the indices of the dataframe
     def get_potential_matches(row, kdtree, vect_dict, distance_threshold=0.0004):
         vector_coords = np.array([row["vector-in"][0], row["vector-in"][1], row["vector-out"][0], row["vector-out"][1]])
         
@@ -53,8 +54,6 @@ def generate_map_weighted(dataframe, activities_map, debug=False):
         second_point_indices = second_point_indices // 2
 
         potential_matches = vect_dict.iloc[np.unique(np.concatenate([first_point_indices, second_point_indices]))]
-        if debug:
-            return vect_dict
         return potential_matches
     
     def get_rectangle(row):
@@ -64,15 +63,15 @@ def generate_map_weighted(dataframe, activities_map, debug=False):
         
         # Handle the vertical line case (when dx is 0)
         if dx == 0:
-            x_offset = 0.00001
+            x_offset = 0.00003
             y_offset = 0
         else:
             # Calculate the angle of the vector
             angle = np.arctan2(dy, dx)
             
             # Calculate the offsets based on the angle
-            x_offset = 0.00001 * np.sin(angle)
-            y_offset = 0.00001 * np.cos(angle)
+            x_offset = 0.00003 * np.sin(angle)
+            y_offset = 0.00003 * np.cos(angle)
 
         rectangle = Polygon([
             (row["vector-in"][0] - x_offset, row["vector-in"][1] + y_offset),
@@ -80,6 +79,7 @@ def generate_map_weighted(dataframe, activities_map, debug=False):
             (row["vector-out"][0] + x_offset, row["vector-out"][1] - y_offset),
             (row["vector-out"][0] - x_offset, row["vector-out"][1] + y_offset)
         ])
+
         if not rectangle.is_valid:
             print("Invalid rectangle for vector {0}".format(row))
             print("Coordinates:")
@@ -93,39 +93,57 @@ def generate_map_weighted(dataframe, activities_map, debug=False):
         weight_to_add = 0
         rows_to_delete = []
         potential_matches = get_potential_matches(row, kdtree, vect_dict)
+        rectangle = get_rectangle(row)
+        if random.random() < 0.001:
+            # plot
+            debug_map = folium.Map(location=[48.8566, 2.3522], zoom_start=5)
+            folium.PolyLine([row["vector-in"], row["vector-out"]], color="black", weight=2).add_to(debug_map)
+            folium.Polygon(rectangle.exterior.coords, color="red", weight=2).add_to(debug_map)
+            for j, row2 in potential_matches.iterrows():
+                folium.PolyLine([row2["vector-in"], row2["vector-out"]], color="blue", weight=2).add_to(debug_map)
+            debug_map.save("out/debug_map.html")
         for j, row2 in potential_matches.iterrows():
+            if j in rows_to_delete:
+                continue
             # check if the id is close (same file, id difference is 2 or less)
             if row2["file"] == row["file"] and (abs(row2["id"] - row["id"]) <= 2 and debug == False):
                 continue
-            rectangle = get_rectangle(row)
+            if row2["length"] < row["length"]:
+                continue
             vector2 = LineString([row2["vector-in"], row2["vector-out"]])
             # check if the other vector is in the rectangle
             if vector2.intersects(rectangle) or rectangle.contains(vector2):
                 weight_to_add += row2["weight"]
 
-                intersection = vector2.intersection(rectangle)
-                if not intersection.is_empty:
-                    if isinstance(intersection, Point):
-                        # If the intersection is a single point
-                        point = (intersection.x, intersection.y)
-                        new_vector_1 = {"vector-in": row2["vector-in"], "vector-out": point, "file": row2["file"], "id": file_max_id[row2["file"]] + 1, "weight": 1, "length": ((point[0] - row2["vector-in"][0])**2 + (point[1] - row2["vector-in"][1])**2)**0.5}
-                        new_vector_2 = {"vector-in": point, "vector-out": row2["vector-out"], "file": row2["file"], "id": file_max_id[row2["file"]] + 2, "weight": 1, "length": ((row2["vector-out"][0] - point[0])**2 + (row2["vector-out"][1] - point[1])**2)**0.5}
-                        file_max_id[row2["file"]] += 2
-                    elif isinstance(intersection, LineString):
-                        # If the intersection is a line (which means the vector intersects with the rectangle at two points, we only want the external vectors)
-                        coords = list(intersection.coords)
-                        new_vector_1 = {"vector-in": row2["vector-in"], "vector-out": coords[0], "file": row2["file"], "id": file_max_id[row2["file"]] + 1, "weight": 1, "length": ((coords[0][0] - row2["vector-in"][0])**2 + (coords[0][1] - row2["vector-in"][1])**2)**0.5}
-                        new_vector_2 = {"vector-in": coords[1], "vector-out": row2["vector-out"], "file": row2["file"], "id": file_max_id[row2["file"]] + 2, "weight": 1, "length": ((row2["vector-out"][0] - coords[1][0])**2 + (row2["vector-out"][1] - coords[1][1])**2)**0.5}
-                        file_max_id[row2["file"]] += 2
-                    else:
-                        raise ValueError("Unexpected intersection result.")
+                rows_to_delete.append(j)
+                # intersection = vector2.intersection(rectangle)
+                # if not intersection.is_empty:
+                #     if isinstance(intersection, Point):
+                #         # If the intersection is a single point
+                #         point = (intersection.x, intersection.y)
+                #         # find if vector-in or vector-out is inside the rectangle
+                #         if rectangle.contains(Point(row2["vector-in"])):
+                #             new = {"vector-in": row2["vector-out"], "vector-out": point, "file": row2["file"], "id": file_max_id[row2["file"]] + 1, "weight": 1, "length": ((point[0] - row2["vector-in"][0])**2 + (point[1] - row2["vector-in"][1])**2)**0.5}
+                #             file_max_id[row2["file"]] += 1
+                #         else:
+                #             new = {"vector-in": row2["vector-in"], "vector-out": point, "file": row2["file"], "id": file_max_id[row2["file"]] + 1, "weight": 1, "length": ((point[0] - row2["vector-in"][0])**2 + (point[1] - row2["vector-in"][1])**2)**0.5}
+                #             file_max_id[row2["file"]] += 1
+                #         created_vectors.append(new)
+                #     elif isinstance(intersection, LineString):
+                #         # If the intersection is a line (which means the vector intersects with the rectangle at two points, we only want the external vectors)
+                #         coords = list(intersection.coords)
+                #         closest_to_in = min(coords, key=lambda x: ((x[0] - row["vector-in"][0])**2 + (x[1] - row["vector-in"][1])**2)**0.5)
+                #         closest_to_out = min(coords, key=lambda x: ((x[0] - row["vector-out"][0])**2 + (x[1] - row["vector-out"][1])**2)**0.5)
+                #         new_vector_1 = {"vector-in": row2["vector-in"], "vector-out": closest_to_in, "file": row2["file"], "id": file_max_id[row2["file"]] + 1, "weight": 1, "length": ((coords[0][0] - row2["vector-in"][0])**2 + (coords[0][1] - row2["vector-in"][1])**2)**0.5}
+                #         new_vector_2 = {"vector-in": closest_to_out, "vector-out": row2["vector-out"], "file": row2["file"], "id": file_max_id[row2["file"]] + 2, "weight": 1, "length": ((row2["vector-out"][0] - coords[1][0])**2 + (row2["vector-out"][1] - coords[1][1])**2)**0.5}
+                #         file_max_id[row2["file"]] += 2
+                #         created_vectors.extend([new_vector_1, new_vector_2])
+                #     else:
+                #         raise ValueError("Unexpected intersection result.")
 
-                    rows_to_delete.append(j)
-                    created_vectors.extend([new_vector_1, new_vector_2])
-
-                    break
-                else:
-                    rows_to_delete.append(j)
+                #     rows_to_delete.append(j)
+                # else:
+                #     rows_to_delete.append(j)
 
         return created_vectors, rows_to_delete, weight_to_add
 
