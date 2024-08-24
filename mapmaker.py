@@ -133,9 +133,13 @@ def generate_map_weighted(dataframe, activities_map, debug=False):
 
     new_vectors = []
     vect_to_delete = []
+    progress = 0
     for index, row in vect_dict.iterrows():
         # check if any other vector is in the rectangle
         new_vects, to_delete, tmp_weight = process_vector(row, kdtree, vect_dict)
+        progress += 1
+        if progress % 100 == 0:
+            print("Processed {0} vectors out of {1}".format(progress, len(vect_dict)))
         vect_dict.at[index, "weight"] += tmp_weight
         if new_vects:
             new_vectors.extend(new_vects)
