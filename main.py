@@ -1,121 +1,77 @@
-import os
-import folium
-import polyline
-from scipy.spatial import KDTree
-import numpy as np
+import argparse
+import sys
 
+try:
+    from tqdm import tqdm
+except ImportError:
+    tqdm = None
+
+import cache
+import maps
+import segments
+import training
 from login import login
 
-color_intensity = ['#110746', '#410956', '#6e055f', '#990861', '#bf215d', '#df4152', '#f76544', '#ff8d30', '#ffb716', '#ffe100']
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Strava activities scraper & map generator")
+    parser.add_argument("--no-fetch", action="store_true", help="Don't sync activities from Strava, use the local cache as-is")
+    parser.add_argument("--refresh", action="store_true", help="Re-fetch and overwrite every cached activity")
+    parser.add_argument("--no-browser", action="store_true", help="Don't open generated maps in a browser")
+    parser.add_argument("--full-map", action="store_true", help="Generate the full (unweighted) activities map")
+    parser.add_argument("--weighted-map", action="store_true", help="Generate the weighted activities map (heavy)")
+    parser.add_argument("--heatmap", action="store_true", help="Generate a heatmap of all activities")
+    parser.add_argument("--segments", type=int, nargs="?", const=20, default=None, metavar="N",
+                         help="Print the N most popular segments (default 20)")
+    parser.add_argument("--training-blocks", action="store_true", help="Detect training blocks leading up to races")
+    parser.add_argument("--all", action="store_true", help="Run every feature")
+    return parser.parse_args()
 
 
-# Experimental : Higher radius but only one circle gets overlapped per polyline
-def generate_map_weighted(activities_map, experimental=False):
-    list_of_poly = []
-    for file in os.listdir("cache"):
-        if file.startswith("map-"):
-            with open("cache/{0}".format(file), "r") as f:
-                line = polyline.decode(f.read())
-                list_of_poly.append(line)
+def main():
+    args = parse_args()
 
-    
-    coords = [(tuple(coord), i) for i, poly in enumerate(list_of_poly) for coord in poly]
+    ran_specific = any([
+        args.full_map, args.weighted_map, args.heatmap,
+        args.segments is not None, args.training_blocks,
+    ])
+    if args.all or not ran_specific:
+        args.full_map = True
+        args.weighted_map = True
+        args.heatmap = True
+        args.training_blocks = True
+        if args.segments is None:
+            args.segments = 20
 
-    # Extract just the coordinates for KDTree
-    points = np.array([coord for coord, _ in coords])
-    
-    tree = KDTree(points)
-    
-    coord_dict = {}
-    
-    for coord, i in coords:
-        # Query the KDTree for nearby points within the specified distance
-        distance = experimental and 0.00025 or 0.00015
-        indices = tree.query_ball_point(coord, distance, return_sorted=True)
-
-        value = 1
-        keys_to_delete = []
-        treated_polys = []
-
-        # Check the nearby points
-        for idx in indices:
-            nearby_coord, poly_index = coords[idx]
-            if poly_index != i and poly_index not in treated_polys:
-                value += coord_dict.get(nearby_coord, (1, poly_index))[0]
-                treated_polys.append(poly_index)
-                keys_to_delete.append(nearby_coord)
-            elif not experimental:
-                keys_to_delete.append(nearby_coord)
-        
-        # Delete the keys that are too close
-        for key in keys_to_delete:
-            if key in coord_dict:
-                del coord_dict[key]
-
-        coord_dict[coord] = (value, i)
-
-    for coord, (value, _) in coord_dict.items():
-        color = color_intensity[min(value, len(color_intensity) - 1)]
-        popup = folium.Popup("Passé {0} fois".format(value))
-        folium.CircleMarker(coord, radius=5, color=color, fill_color=color, popup=popup).add_to(activities_map)
-
-
-def generate_full_map(activities_map):
-    # iterate over the cache folder and add the polylines to the map
-    for file in os.listdir("cache"):
-        if file.startswith("map-"):
-            with open("cache/{0}".format(file), "r") as f:
-                line = polyline.decode(f.read())
-                folium.PolyLine(line, color="black", weight=2).add_to(activities_map)
-
-def global_map(weighted=False):
-    create_map_cache()
-
-    activities_map = folium.Map(location=[48.8566, 2.3522], zoom_start=5)
-
-    if weighted:
-        generate_map_weighted(activities_map, False) # This will REMOVE the polylines and generate circles with weights - HEAVY !!
-    else:
-        generate_full_map(activities_map) # This will ADD the polylines but no weights (overlapping lines)
-
-    activities_map.save("out/activities_map.html")
-
-    if weighted:
-        generate_map_weighted(activities_map, True)
-        activities_map.save("out/activities_map_experimental.html")
-
-    # open the map in the browser
-    import webbrowser
-    webbrowser.open(os.path.abspath("out/activities_map.html"))
-    if weighted:
-        webbrowser.open(os.path.abspath("out/activities_map_experimental.html"))
-
-
-
-
-def create_map_cache():
-    activities = client.get_activities()
-    print("Loading user's activities...")
-    print("Found {0} activities".format(len(list(activities))))
-    for activity in activities:
-        if os.path.exists("cache/map-{0}.json".format(activity.id)):
-            continue
-
-        poly = client.get_activity(activity.id).map.polyline
-        if poly:
-            with open("cache/map-{0}.json".format(activity.id), "w") as f:
-                f.write(poly)
-        else:
-            print("Activity {0} has no polyline data".format(activity.id))
-
-
-if __name__ == "__main__":
-    try :
+    try:
         client = login()
     except Exception as e:
         print("Error: {0}".format(e))
-        exit(1)
+        sys.exit(1)
 
-    global_map(True)
+    activities = []
+    if not args.no_fetch:
+        activities = cache.sync_activities(client, force_refresh=args.refresh, progress=tqdm)
+    elif args.training_blocks:
+        activities = list(client.get_activities())
 
-    
+    open_browser = not args.no_browser
+
+    if args.full_map:
+        maps.build_full_map(open_browser=open_browser)
+
+    if args.weighted_map:
+        maps.build_weighted_map(open_browser=open_browser, progress=tqdm)
+
+    if args.heatmap:
+        maps.build_heatmap(open_browser=open_browser)
+
+    if args.segments is not None:
+        segments.print_popular_segments(top_n=args.segments)
+
+    if args.training_blocks:
+        training.print_training_blocks(activities)
+
+
+if __name__ == "__main__":
+    main()
