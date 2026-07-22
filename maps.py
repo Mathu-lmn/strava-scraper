@@ -14,6 +14,49 @@ color_intensity = ['#110746', '#410956', '#6e055f', '#990861', '#bf215d', '#df41
 OUT_DIR = "out"
 DEFAULT_LOCATION = [48.8566, 2.3522]
 
+# Lets sibling maps (each a separate Leaflet instance in its own dashboard
+# iframe) share pan/zoom: on move, broadcast the view to window.parent (the
+# dashboard), which relays it to the other map iframes. Deferred to
+# window "load" since folium may emit this script before the map variable
+# itself is declared - `var` declarations are only visible once their own
+# <script> block has run, so we can't rely on tag order and instead wait
+# for everything to finish loading and read the map off `window`.
+_VIEW_SYNC_SCRIPT = """
+<script>
+window.addEventListener("load", function () {
+  var mapObj = window["__MAP_NAME__"];
+  if (!mapObj) return;
+  var applyingRemote = false;
+
+  function postView() {
+    if (applyingRemote) return;
+    try {
+      window.parent.postMessage({
+        source: "strava-map",
+        type: "view",
+        center: [mapObj.getCenter().lat, mapObj.getCenter().lng],
+        zoom: mapObj.getZoom()
+      }, "*");
+    } catch (e) {}
+  }
+
+  mapObj.on("moveend", postView);
+
+  window.addEventListener("message", function (e) {
+    var data = e.data;
+    if (!data || data.source !== "strava-dashboard") return;
+    applyingRemote = true;
+    mapObj.setView(data.center, data.zoom, { animate: false });
+    applyingRemote = false;
+  });
+
+  try {
+    window.parent.postMessage({ source: "strava-map", type: "ready" }, "*");
+  } catch (e) {}
+});
+</script>
+"""
+
 
 def _load_polylines():
     lines = []
@@ -25,7 +68,9 @@ def _load_polylines():
 
 
 def _new_map():
-    return folium.Map(location=DEFAULT_LOCATION, zoom_start=5)
+    m = folium.Map(location=DEFAULT_LOCATION, zoom_start=5)
+    m.get_root().html.add_child(folium.Element(_VIEW_SYNC_SCRIPT.replace("__MAP_NAME__", m.get_name())))
+    return m
 
 
 def _save_and_open(activities_map, filename, open_browser):

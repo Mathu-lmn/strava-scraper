@@ -23,7 +23,9 @@ def _legacy_polyline(activity_id):
 
 
 def _type_str(activity_type):
-    return activity_type.root if activity_type is not None else None
+    if activity_type is None:
+        return None
+    return getattr(activity_type, "root", getattr(activity_type, "__root__", activity_type))
 
 
 def read_cached_activity(activity_id):
@@ -110,6 +112,7 @@ def sync_activities(client, force_refresh=False, progress=None):
                 "id": effort.segment.id,
                 "name": effort.segment.name,
                 "distance": float(effort.segment.distance) if effort.segment.distance is not None else None,
+                "elapsed_time": int(effort.elapsed_time.total_seconds()) if effort.elapsed_time is not None else None,
             }
             for effort in (detail.segment_efforts or [])
             if effort.segment is not None
@@ -122,7 +125,7 @@ def sync_activities(client, force_refresh=False, progress=None):
             "workout_type": detail.workout_type,
             "start_date": detail.start_date.isoformat() if detail.start_date else None,
             "distance": float(detail.distance) if detail.distance is not None else None,
-            "moving_time": int(detail.moving_time) if detail.moving_time is not None else None,
+            "moving_time": int(detail.moving_time.total_seconds()) if detail.moving_time is not None else None,
             "polyline": poly,
             "segment_efforts": segment_efforts,
         })
